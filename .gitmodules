@@ -1,0 +1,4 @@
+[submodule "sites/ShabTrainClock"]
+	path = sites/ShabTrainClock
+	url = https://github.com/JYudelson1/ShabTrainClock.git
+	branch = main
