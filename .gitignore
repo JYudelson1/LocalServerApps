@@ -2,3 +2,8 @@
 *.swp
 .idea/
 .vscode/
+
+# Secrets shared across sites — see README/notes.
+.env
+.env.*
+!.env.example

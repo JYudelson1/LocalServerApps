@@ -7,3 +7,5 @@ cd "$ROOT"
 
 git pull
 "${ROOT}/update_submodules.sh"
+
+echo "Server up to date. Remember to transfer .env file to the server."
