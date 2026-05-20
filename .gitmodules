@@ -2,3 +2,7 @@
 	path = sites/ShabTrainClock
 	url = https://github.com/JYudelson1/ShabTrainClock.git
 	branch = main
+[submodule "scripts/psfc"]
+	path = scripts/psfc
+	url = https://github.com/JYudelson1/claude-psfc.git
+	branch = main
