@@ -186,10 +186,9 @@ def main() -> None:
         cmd_set_port(catalog, runtime, args.name, args.port)
     elif args.cmd == "setup":
         if hasattr(backend, "enable_linger"):
-            backend.enable_linger()
-            print("Enabled systemd user lingering (persists across reboot).")
+            backend.enable_linger()  # prints its own confirmation / sudo hint
         else:
-            print("Nothing to set up for this backend.")
+            print("Nothing to set up for this backend (launchd needs no linger).")
 
 
 if __name__ == "__main__":

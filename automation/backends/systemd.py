@@ -12,16 +12,30 @@ LaunchDaemon but without root papercuts.
   - daemon  -> <name>.service (Restart=always)
   - periodic-> <name>.service (oneshot) + <name>.timer (OnUnitActiveSec)
 
-NOTE: written to spec but only exercised on the Pi — verify there.
+NOTE: written to spec but NOT yet run on real hardware — only the launchd path
+has actually executed (on the Mac). Validate on the Pi using PI_SETUP.md.
 """
 
 from __future__ import annotations
 
+import getpass
 import os
 import subprocess
 from pathlib import Path
 
 from .base import NOT_INSTALLED, RUNNING, STOPPED, UNKNOWN, Backend, Unit
+
+
+def _user_env() -> dict:
+    """Environment for systemctl/loginctl --user calls.
+
+    Over a plain SSH session XDG_RUNTIME_DIR is often unset, which makes
+    `systemctl --user` fail with "Failed to connect to bus". Default it to the
+    standard per-uid runtime dir so the calls work non-interactively too.
+    """
+    env = dict(os.environ)
+    env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return env
 
 UNIT_PREFIX = "lsa"  # systemd unit names: lsa-<name>.service / .timer
 # Common locations for uv / pipx / user installs on a Pi, plus system bins.
@@ -46,7 +60,8 @@ class SystemdBackend(Backend):
 
     def _uctl(self, *args: str, check: bool = False) -> subprocess.CompletedProcess:
         return subprocess.run(["systemctl", "--user", *args],
-                              capture_output=True, text=True, check=check)
+                              capture_output=True, text=True, check=check,
+                              env=_user_env())
 
     def install(self, unit: Unit) -> None:
         self._unit_dir.mkdir(parents=True, exist_ok=True)
@@ -59,7 +74,11 @@ class SystemdBackend(Backend):
         service = (
             "[Unit]\n"
             f"Description={unit.description or unit.name}\n"
-            "After=network-online.target\n\n"
+            "After=network-online.target\n"
+            # Disable the start-rate limiter so a service that fails for a while
+            # (e.g. a transiently-stuck port) is never permanently parked in
+            # "start-limit-hit" — it keeps retrying, like launchd KeepAlive.
+            "StartLimitIntervalSec=0\n\n"
             "[Service]\n"
             f"WorkingDirectory={unit.workdir}\n"
             f"Environment=PATH={PATH}\n"
@@ -82,7 +101,7 @@ class SystemdBackend(Backend):
             self._uctl("daemon-reload")
             self._uctl("enable", "--now", _timer(unit.name), check=True)
         else:  # daemon
-            service += ("Restart=always\nRestartSec=3\n\n"
+            service += ("Restart=always\nRestartSec=5\n\n"
                         "[Install]\nWantedBy=default.target\n")
             (self._unit_dir / _svc(unit.name)).write_text(service)
             self._uctl("daemon-reload")
@@ -111,7 +130,25 @@ class SystemdBackend(Backend):
             return STOPPED
         return UNKNOWN
 
-    def enable_linger(self) -> None:
-        """Persist user services across logout/reboot. Needs polkit/sudo."""
-        subprocess.run(["loginctl", "enable-linger", os.environ.get("USER", "")],
-                       capture_output=True)
+    def enable_linger(self) -> bool:
+        """Persist user services across logout/reboot, and verify it took.
+
+        Returns True if lingering is confirmed on. May require sudo/polkit; if
+        the unprivileged attempt doesn't stick, prints the sudo command to run.
+        """
+        user = getpass.getuser()
+        env = _user_env()
+        subprocess.run(["loginctl", "enable-linger", user],
+                       capture_output=True, text=True, env=env)
+        check = subprocess.run(
+            ["loginctl", "show-user", user, "--property=Linger"],
+            capture_output=True, text=True, env=env,
+        )
+        ok = "Linger=yes" in check.stdout
+        if ok:
+            print(f"Lingering enabled for '{user}' — services persist across "
+                  f"logout/reboot.")
+        else:
+            print(f"Could not confirm lingering for '{user}'. Run once with sudo:\n"
+                  f"  sudo loginctl enable-linger {user}")
+        return ok

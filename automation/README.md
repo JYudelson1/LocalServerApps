@@ -78,7 +78,9 @@ Runs as you, no root. `daemon` → `Restart=always`; `periodic` → `.service` +
 > After that, enabled services start at boot and survive logout/reboot.
 
 > The systemd backend is written to spec but has only been exercised on macOS
-> so far — verify on the Pi when you get there.
+> so far. **When bringing up a Pi, follow [`PI_SETUP.md`](PI_SETUP.md)** — it
+> walks through linger, the `XDG_RUNTIME_DIR`/SSH gotcha, the reboot test, and
+> the bits that still need real-hardware validation.
 
 ## Logs
 
