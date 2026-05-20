@@ -67,10 +67,19 @@ Daemons should already be `running`. If they're not, linger (step 3) didn't
 take. Also hit the admin panel from another device: `http://<pi-ip>:8900`.
 
 ## 6. Per-service gotchas
-- **psfc-monitor (Playwright/Chromium on ARM):** needs `playwright install
-  chromium` plus system libs, and ARM support is finicky. Verify the monitor
-  runs by hand first: `cd scripts/psfc && ./run_monitor.sh` and read
-  `monitor.log`.
+- **psfc-monitor (Playwright/Chromium on ARM):** `run_monitor.sh` now
+  auto-installs the Chromium *binary* on first run (the `uv` sync only installs
+  the Playwright package, not the browser). But the browser's **system libs**
+  still need a one-time install with sudo:
+  ```bash
+  cd scripts/psfc
+  uv run playwright install-deps chromium   # apt libs Chromium needs (sudo)
+  ./run_monitor.sh && tail -n 20 monitor.log # verify
+  ```
+  Needs 64-bit Pi OS (aarch64) for the prebuilt Chromium. **Possible gotcha:**
+  Chromium is memory-hungry — on a low-RAM Pi a headless launch can OOM. If
+  `monitor.log` shows the browser crashing/killed, check `dmesg` for the OOM
+  killer and consider adding swap or a lighter check.
 - **Ordering vs network:** units use `After=network-online.target`, which is
   only meaningful if `NetworkManager-wait-online` (or `systemd-networkd-wait-online`)
   is enabled. Harmless if not, but if a service races the network on boot,
