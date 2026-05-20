@@ -2,8 +2,17 @@
 *.swp
 .idea/
 .vscode/
+**/__pycache__/
 
 # Secrets shared across sites — see README/notes.
 .env
 .env.*
 !.env.example
+
+# Per-server runtime state (which services are on + their ports). Backed up,
+# but never shared between servers.
+automation/runtime.json
+
+# Runtime logs from automation services
+data/logs/
+*.log

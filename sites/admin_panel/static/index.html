@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LocalServerApps · Admin</title>
+  <style>
+    :root {
+      --bg: #0f0f10; --fg: #e8e6e1; --dim: #8a8780;
+      --rule: rgba(232,230,225,0.12); --on: #6cbe45; --off: #6b6863;
+      --accent: #7a9b8e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      padding: 4vh 5vw; line-height: 1.5;
+    }
+    h1 { font-size: 1.4em; font-weight: 600; letter-spacing: 0.02em; }
+    h2 {
+      font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.2em;
+      color: var(--dim); margin: 2em 0 0.8em; border-bottom: 1px solid var(--rule);
+      padding-bottom: 0.4em;
+    }
+    .sub { color: var(--dim); font-size: 0.85em; margin-top: 0.3em; }
+
+    .svc {
+      display: flex; align-items: center; gap: 1em;
+      padding: 0.9em 0; border-bottom: 1px dashed var(--rule);
+    }
+    .svc .meta { flex: 1; min-width: 0; }
+    .svc .name { font-weight: 600; }
+    .svc .desc { color: var(--dim); font-size: 0.82em; }
+    .live {
+      font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.1em;
+      padding: 0.15em 0.6em; border-radius: 999px; border: 1px solid var(--rule);
+      color: var(--dim); white-space: nowrap;
+    }
+    .live.running { color: var(--on); border-color: var(--on); }
+    .live.stopped { color: var(--off); }
+
+    .port-edit { display: flex; align-items: center; gap: 0.4em; }
+    .port-input {
+      width: 5em; background: #1a1a1c; color: var(--fg);
+      border: 1px solid var(--rule); border-radius: 4px;
+      padding: 0.25em 0.4em; font: inherit; font-size: 0.85em;
+    }
+    .port-input:disabled { opacity: 0.4; }
+    .port-save {
+      background: transparent; color: var(--accent); cursor: pointer;
+      border: 1px solid var(--accent); border-radius: 4px;
+      padding: 0.25em 0.7em; font: inherit; font-size: 0.8em;
+    }
+    .port-save:disabled { color: var(--off); border-color: var(--rule); cursor: not-allowed; }
+
+    /* toggle switch */
+    .toggle { position: relative; width: 3.2em; height: 1.7em; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; inset: 0; cursor: pointer; background: var(--off);
+      border-radius: 999px; transition: 0.2s;
+    }
+    .slider::before {
+      content: ""; position: absolute; height: 1.3em; width: 1.3em;
+      left: 0.2em; bottom: 0.2em; background: #fff; border-radius: 50%;
+      transition: 0.2s;
+    }
+    input:checked + .slider { background: var(--on); }
+    input:checked + .slider::before { transform: translateX(1.5em); }
+
+    /* system load */
+    .sys { display: flex; gap: 2em; flex-wrap: wrap; margin-top: 0.5em; }
+    .stat .label { color: var(--dim); font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.1em; }
+    .stat .value { font-size: 1.6em; font-variant-numeric: tabular-nums; }
+    .bar { height: 6px; background: var(--rule); border-radius: 3px; overflow: hidden; margin-top: 0.3em; width: 12em; }
+    .bar > i { display: block; height: 100%; background: var(--accent); }
+    #status { color: var(--dim); font-size: 0.8em; margin-top: 2em; }
+    #status.error { color: #d4736a; }
+  </style>
+</head>
+<body>
+  <h1>LocalServerApps</h1>
+  <div class="sub">control panel · LAN only</div>
+
+  <h2>System</h2>
+  <div class="sys" id="sys">—</div>
+
+  <h2>Sites</h2>
+  <div id="sites"></div>
+
+  <h2>Automations</h2>
+  <div id="automations"></div>
+
+  <div id="status">loading…</div>
+
+<script>
+  function fmtBytes(b) {
+    const gb = b / (1024 ** 3);
+    return gb >= 1 ? gb.toFixed(1) + ' GB' : (b / (1024 ** 2)).toFixed(0) + ' MB';
+  }
+  function fmtUptime(s) {
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+    return (d ? d + 'd ' : '') + h + 'h ' + m + 'm';
+  }
+
+  async function toggle(name, enabled) {
+    setStatus('applying ' + name + '…');
+    try {
+      const r = await fetch(`/api/services/${name}/toggle`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ enabled }),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || r.status);
+      await refresh();
+    } catch (e) {
+      setStatus('toggle failed: ' + e.message, true);
+    }
+  }
+
+  async function savePort(name, port) {
+    setStatus('saving port for ' + name + '…');
+    try {
+      const r = await fetch(`/api/services/${name}/port`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ port }),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || r.status);
+      await refresh();
+    } catch (e) {
+      setStatus('save port failed: ' + e.message, true);
+    }
+  }
+
+  function renderService(s) {
+    const row = document.createElement('div');
+    row.className = 'svc';
+
+    // Right-side control: a port editor for daemons, interval text for periodic.
+    let controlHTML = '';
+    if (s.kind === 'periodic') {
+      controlHTML = `<span class="desc">every ${Math.round((s.interval_sec || 0) / 60)}m</span>`;
+    } else {
+      // Port is only editable while the service is disabled.
+      const dis = s.enabled ? 'disabled' : '';
+      controlHTML = `
+        <span class="port-edit">
+          <span class="desc">port</span>
+          <input type="number" class="port-input" value="${s.port ?? ''}" ${dis}>
+          <button class="port-save" ${dis}>save</button>
+        </span>`;
+    }
+
+    row.innerHTML = `
+      <label class="toggle">
+        <input type="checkbox" ${s.enabled ? 'checked' : ''}>
+        <span class="slider"></span>
+      </label>
+      <div class="meta">
+        <div class="name">${s.name}</div>
+        <div class="desc">${s.description || ''}</div>
+      </div>
+      ${controlHTML}
+      <span class="live ${s.live}">${s.live}</span>
+    `;
+
+    row.querySelector('.toggle input').addEventListener('change', (e) => toggle(s.name, e.target.checked));
+    const saveBtn = row.querySelector('.port-save');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        const val = parseInt(row.querySelector('.port-input').value, 10);
+        if (Number.isInteger(val) && val > 0 && val < 65536) savePort(s.name, val);
+        else setStatus('enter a valid port (1–65535)', true);
+      });
+    }
+    return row;
+  }
+
+  async function refresh() {
+    try {
+      const [stateR, sysR] = await Promise.all([fetch('/api/state'), fetch('/api/system')]);
+      const { services } = await stateR.json();
+      const sys = await sysR.json();
+
+      const sitesEl = document.getElementById('sites');
+      const autoEl = document.getElementById('automations');
+      sitesEl.innerHTML = ''; autoEl.innerHTML = '';
+      services.forEach(s => {
+        (s.kind === 'periodic' ? autoEl : sitesEl).appendChild(renderService(s));
+      });
+
+      document.getElementById('sys').innerHTML = `
+        <div class="stat">
+          <div class="label">Memory</div>
+          <div class="value">${sys.mem_percent}%</div>
+          <div class="bar"><i style="width:${sys.mem_percent}%"></i></div>
+          <div class="desc">${fmtBytes(sys.mem_used)} / ${fmtBytes(sys.mem_total)}</div>
+        </div>
+        <div class="stat">
+          <div class="label">CPU</div>
+          <div class="value">${sys.cpu_percent}%</div>
+          <div class="bar"><i style="width:${sys.cpu_percent}%"></i></div>
+          <div class="desc">load ${sys.load_avg.map(x => x.toFixed(2)).join(' ')}</div>
+        </div>
+        <div class="stat">
+          <div class="label">Uptime</div>
+          <div class="value">${fmtUptime(sys.uptime_sec)}</div>
+        </div>
+      `;
+      const t = new Date();
+      setStatus(`updated ${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`);
+    } catch (e) {
+      setStatus('refresh failed: ' + e.message, true);
+    }
+  }
+
+  function setStatus(text, isError = false) {
+    const el = document.getElementById('status');
+    el.textContent = text; el.classList.toggle('error', isError);
+  }
+
+  refresh();
+  setInterval(refresh, 5000);
+</script>
+</body>
+</html>

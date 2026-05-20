@@ -1,0 +1,26 @@
+{
+  "_comment": "Service CATALOG — tracked by git, shared to every server. Defines what CAN run. On/off state and the live port live in runtime.json (untracked, per-server). Add a service here; toggle it via ctl.py or the admin panel. Paths are relative to the LocalServerApps root; {port} is filled from the runtime port (falling back to the default below).",
+  "services": {
+    "admin-panel": {
+      "kind": "daemon",
+      "dir": "sites/admin_panel",
+      "command": "./start.sh {port}",
+      "port": 8900,
+      "description": "This control panel. Recover if toggled off: ctl.py enable admin-panel"
+    },
+    "shab-train-clock": {
+      "kind": "daemon",
+      "dir": "sites/ShabTrainClock",
+      "command": "./start.sh {port}",
+      "port": 8000,
+      "description": "Wall dashboard for the kitchen tablet"
+    },
+    "psfc-monitor": {
+      "kind": "periodic",
+      "dir": "scripts/psfc",
+      "command": "./run_monitor.sh",
+      "interval_sec": 900,
+      "description": "Park Slope Food Coop orientation-slot monitor"
+    }
+  }
+}
