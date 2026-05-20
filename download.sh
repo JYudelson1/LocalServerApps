@@ -38,9 +38,11 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 # --- 3. pull latest -------------------------------------------------------
+git clone --recurse-submodules https://github.com/JYudelson1/LocalServerApps.git
+cd LocalServerApps
 if [ -d .git ]; then
   git pull
-  "$ROOT/update_submodules.sh"
+  "$ROOT/LocalServerApps/update_submodules.sh"
 else
   echo "Not a git checkout; skipping pull."
 fi
@@ -49,9 +51,9 @@ fi
 # enable admin-panel: guarantees the panel is on even on a brand-new server
 # (a fresh runtime.json starts everything disabled). apply: reconcile the rest
 # of THIS server's runtime state (restored from backup, if any).
-python3 "$ROOT/automation/ctl.py" enable admin-panel
-python3 "$ROOT/automation/ctl.py" apply
+uv run "$ROOT/LocalServerApps/automation/ctl.py" enable admin-panel
+uv run "$ROOT/LocalServerApps/automation/ctl.py" apply
 
 echo
 echo "Server up. Services are managed via automation/ctl.py (and the admin panel)."
-echo "Reminder: place the shared secrets file at $ROOT/.env"
+echo "Reminder: place the shared secrets file at $ROOT/LocalServerApps/.env"
